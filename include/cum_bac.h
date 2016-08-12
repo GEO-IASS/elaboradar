@@ -219,6 +219,8 @@ struct CalcoloVPR
 {
     log4c_category_t* logging_category;
 
+    const radarelab::Volume<double>& volume;
+    radarelab::algo::DBZ dbz;
     CUM_BAC& cum_bac;   ///< oggeto CUM_BAC di riferimento
     long int gap;   ///< distanza temporale dall'ultimo file vpr [numero acquisizioni intercorse dall'ultimo vpr ?)
     float t_ground; ///< 2m temperature
@@ -254,7 +256,7 @@ struct CalcoloVPR
  * Constructor
  * @param [in] cum_bac - CUM_BAC object 
  */
-    CalcoloVPR(CUM_BAC& cum_bac);
+    CalcoloVPR(const radarelab::Volume<double>& volume, CUM_BAC& cum_bac);
     ~CalcoloVPR();
     
     /**

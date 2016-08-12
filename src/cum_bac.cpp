@@ -145,7 +145,7 @@ CUM_BAC::~CUM_BAC()
 
 void CUM_BAC::want_vpr()
 {
-    calcolo_vpr = new CalcoloVPR(*this);
+    calcolo_vpr = new CalcoloVPR(volume, *this);
 }
 
 void CUM_BAC::read_sp20_volume(Volume<double>& volume, const Site& site, const char* nome_file, bool do_clean, bool do_medium)
@@ -728,7 +728,7 @@ void CalcoloVPR::classifica_rain()
     //  if (hmax > 2000.) {// per evitare contaminazioni della bright band, si puo' tunare
     // if (hbbb > 500.) {// per evitare contaminazioni della bright band, si puo' tunare
 
-    algo::CalcoloSteiner steiner(cum_bac.volume, cum_bac.anaprop.elev_fin, cil.x_size);
+    algo::CalcoloSteiner steiner(volume, cum_bac.anaprop.elev_fin, cil.x_size);
     steiner.calcolo_background();
     steiner.classifico_STEINER();
     //  }
@@ -788,7 +788,7 @@ int CalcoloVPR::combina_profili()
 
 
     /* questo per fare ciclo sul vpr vecchio*/
-    Time = cum_bac.volume.load_info->acq_date;
+    Time = volume.load_info->acq_date;
 
     //--------inizializzo cv e ct-------------//
     //-----calcolo del profilo istantaneo:faccio func_vpr-----//
@@ -862,7 +862,7 @@ LOG_DEBUG (" modalita %d",mode);
                         //---- converto in R il profilo vecchio--
                         if (vpr0[ilay]>0){
                             vpr_dbz=vpr0[ilay];
-                            vpr0[ilay] = cum_bac.dbz.DBZtoR(vpr_dbz);
+                            vpr0[ilay] = dbz.DBZtoR(vpr_dbz);
                             area[ilay]=ar;
                         }
                         else
@@ -1019,7 +1019,7 @@ int CalcoloVPR::stampa_vpr()
     fprintf(file," QUOTA   DBZ    AREA PRECI(KM^2/1000)\n" );
     for (ilay=0;  ilay<NMAXLAYER; ilay++){
         if (vpr[ilay]> 0.001 ) {
-            vpr_dbz=cum_bac.dbz.RtoDBZ(vpr[ilay]);
+            vpr_dbz=dbz.RtoDBZ(vpr[ilay]);
             fprintf(file," %i %10.3f %li\n", ilay*TCK_VPR+TCK_VPR/2, vpr_dbz, area_vpr[ilay]);
         }
         else
@@ -1081,7 +1081,7 @@ int CalcoloVPR::corr_vpr()
 
     //correzione vpr
     for (unsigned i=0; i<NUM_AZ_X_PPI; i++){
-        for (unsigned k=0; k<cum_bac.volume[0].beam_size; k++){
+        for (unsigned k=0; k<volume[0].beam_size; k++){
             corr=0.;
             /* trovo elevazione reale e quota bin*/
             //elevaz=(float)(volume_at_elev_preci(i, k).teta_true)*CONV_RAD;
@@ -1097,7 +1097,7 @@ int CalcoloVPR::corr_vpr()
                 }
             }
             //--- impongo una soglia per la correzione pari a 0 dBZ
-            if (cum_bac.volume[0].get(i, k) > THR_CORR && hbin > hliq  && strat){
+            if (volume[0].get(i, k) > THR_CORR && hbin > hliq  && strat){
 
                 //---trovo lo strato del pixel, se maggiore o uguale a NMAXLAYER lo retrocedo di 2, se minore di livmn lo pongo uguale a livmin
                 ilray=(hbin>=livmin)?(floor(hbin/TCK_VPR)):(floor(livmin/TCK_VPR));//discutibile :livello del fascio se minore di livmin posto=livmin
@@ -1139,26 +1139,26 @@ int CalcoloVPR::corr_vpr()
 
                         //volpol[0][i][k]=RtoBYTE(passaggio)
 
-                        corr=cum_bac.dbz.RtoDBZ(vpr[ilref])-cum_bac.dbz.RtoDBZ(vpr_hray);
+                        corr=dbz.RtoDBZ(vpr[ilref])-dbz.RtoDBZ(vpr_hray);
 
-                        cum_bac.volume[0].set(i, k, cum_bac.dbz.DBZ_snow(cum_bac.volume[0].get(i, k)));
+                        volume[0].set(i, k, dbz.DBZ_snow(volume[0].get(i, k)));
                     }
                     else{
                         // -- altrimenti correggo comunque a livello liquido :
-                        corr = cum_bac.dbz.RtoDBZ_class(vpr_liq) - cum_bac.dbz.RtoDBZ_class(vpr_hray);/*riporto comunque al valore liquido anche se sono sopra la bright band*/
+                        corr = dbz.RtoDBZ_class(vpr_liq) - dbz.RtoDBZ_class(vpr_hray);/*riporto comunque al valore liquido anche se sono sopra la bright band*/
                     }
                     // --  controllo qualità su valore correzione
                     if (corr>MAX_CORR) corr=MAX_CORR; /*soglia sulla massima correzione*/
                     if (hbin<hvprmax && corr>0.) corr=0; /*evito effetti incrementi non giustificati*/
 
                     //controllo qualità su valore corretto e correzione
-                    double corrected = cum_bac.volume[0].get(i, k) + corr;
+                    double corrected = volume[0].get(i, k) + corr;
                     if (corrected > MAXVAL_DB) // se dato corretto va fuori scala assegno valore massimo
-                        cum_bac.volume[0].set(i, k, MAXVAL_DB);
+                        volume[0].set(i, k, MAXVAL_DB);
                     else if ( corrected < MINVAL_DB) // se dato corretto va a fodoscala assegno valore di fondo scala
-                        cum_bac.volume[0].set(i, k, MINVAL_DB);
+                        volume[0].set(i, k, MINVAL_DB);
                     else
-                        cum_bac.volume[0].set(i, k, corrected);  // correggo
+                        volume[0].set(i, k, corrected);  // correggo
 
                     corr_polar(i, k)=(unsigned char)(corr)+128;
 
@@ -1374,7 +1374,7 @@ int CalcoloVPR::analyse_VPR(float *vpr_liq,int *snow,float *hliq)
                     File file(logging_category);
                     file.open(fname, "wt", "vpr interpolato");
                     for (unsigned i = 0; i < NMAXLAYER; ++i)
-                        fprintf(file," %f \n", cum_bac.dbz.RtoDBZ(iv.vpr_int[i]));
+                        fprintf(file," %f \n", dbz.RtoDBZ(iv.vpr_int[i]));
 
                     /*calcolo valore di riferimento di vpr_liq per l'acqua liquida nell'ipotesi che a[2]=quota_bright_band e a[2]-1.5*a[3]=quota acqua liquida*/
                     if (tipo_profilo == 2 ) {
@@ -1413,23 +1413,23 @@ int CalcoloVPR::analyse_VPR(float *vpr_liq,int *snow,float *hliq)
 
     /* nome data */
     //definisco stringa data in modo predefinito
-    Time = cum_bac.volume.load_info->acq_date;
+    Time = volume.load_info->acq_date;
     tempo = gmtime(&Time);
     sprintf(date,"%04d%02d%02d%02d%02d",tempo->tm_year+1900, tempo->tm_mon+1,
             tempo->tm_mday,tempo->tm_hour, tempo->tm_min);
     if (! ier ) {
         if(*hliq > livmin +200 )
-            vhliquid=cum_bac.dbz.RtoDBZ(vpr[(int)(*hliq)/TCK_VPR]);
-        vliq=cum_bac.dbz.RtoDBZ(*vpr_liq);
+            vhliquid=dbz.RtoDBZ(vpr[(int)(*hliq)/TCK_VPR]);
+        vliq=dbz.RtoDBZ(*vpr_liq);
     }
     if (ier_max) {
         if ( hvprmax-600 >= livmin )
-            v600sottobb=cum_bac.dbz.RtoDBZ(vpr[(hvprmax-600)/TCK_VPR]);
+            v600sottobb=dbz.RtoDBZ(vpr[(hvprmax-600)/TCK_VPR]);
         if ((hvprmax+1000)/TCK_VPR < NMAXLAYER )
-            v1000=cum_bac.dbz.RtoDBZ(vpr[(hvprmax+1000)/TCK_VPR]);
+            v1000=dbz.RtoDBZ(vpr[(hvprmax+1000)/TCK_VPR]);
         if ((hvprmax+1500)/TCK_VPR < NMAXLAYER )
-            v1500=cum_bac.dbz.RtoDBZ(vpr[(hvprmax+1500)/TCK_VPR]);
-        vprmax=cum_bac.dbz.RtoDBZ(vpr[(hvprmax/TCK_VPR)]);
+            v1500=dbz.RtoDBZ(vpr[(hvprmax+1500)/TCK_VPR]);
+        vprmax=dbz.RtoDBZ(vpr[(hvprmax/TCK_VPR)]);
     }
 
     fprintf(test_vpr,"%s %i %i %f %f %f  %f %f %f %f %f %f %f %f  %f %f %f  %f \n",date,hvprmax,tipo_profilo,stdev,iv.chisqfin,*hliq,vliq,vhliquid,v600sottobb,v1000+6,v1500+6,vprmax,iv.rmsefin,iv.B,iv.E,iv.G,iv.C,iv.F);
@@ -1500,9 +1500,9 @@ int CalcoloVPR::func_vpr(long int *cv, long int *ct, vector<float>& vpr1, vector
     iaz_max=cum_bac.site.vpr_iaz_max;
     LOG_DEBUG(" Iaz_min %d   iaz_max %d",iaz_min,iaz_max);
 
-    for (unsigned l=0; l<cum_bac.volume.size(); l++)//ciclo elevazioni
+    for (unsigned l=0; l<volume.size(); l++)//ciclo elevazioni
     {
-        const PolarScan<double>& scan = cum_bac.volume[l];
+        const PolarScan<double>& scan = volume[l];
 
         for (unsigned k=0; k < scan.beam_size; k++)/*ciclo range*/
         {
@@ -1529,7 +1529,7 @@ int CalcoloVPR::func_vpr(long int *cv, long int *ct, vector<float>& vpr1, vector
 
 
                 vol_rain=0;
-                // dist=(long int)(dist*cos((float)(cum_bac.volume_at_elev_preci(i, k).teta_true)*CONV_RAD));
+                // dist=(long int)(dist*cos((float)(volume_at_elev_preci(i, k).teta_true)*CONV_RAD));
 
                 /* //---------calcolo la distanza proiettata sul piano-------------  */
 
@@ -1561,7 +1561,7 @@ int CalcoloVPR::func_vpr(long int *cv, long int *ct, vector<float>& vpr1, vector
                 if (sample > THR_VPR &&  flag_vpr->scan(l).get(i, k) > 0 )
                 {
                     //-------incremento il volume di pioggia = pioggia x area
-                    vol_rain=(long int)(cum_bac.dbz.DBZ_to_mp_func(sample)*area);//peso ogni cella con la sua area
+                    vol_rain=(long int)(dbz.DBZ_to_mp_func(sample)*area);//peso ogni cella con la sua area
 
                     //-------incremento l'area precipitante totale ct,aggiungendo però,cosa che avevo messo male una THR solo per ct, cioè per il peso
                     if (sample > THR_PDF)
@@ -1805,13 +1805,13 @@ void CUM_BAC::generate_maps(CartProducts& products)
 }
 
 
-CalcoloVPR::CalcoloVPR(CUM_BAC& cum_bac)
-    : cum_bac(cum_bac),
-      conv(NUM_AZ_X_PPI, cum_bac.volume.max_beam_size(),0),
+CalcoloVPR::CalcoloVPR(const radarelab::Volume<double>& volume, CUM_BAC& cum_bac)
+    : volume(volume), dbz(volume), cum_bac(cum_bac),
+      conv(NUM_AZ_X_PPI, volume.max_beam_size(),0),
       area_vpr(NMAXLAYER, 0),
       vpr(NMAXLAYER, NODATAVPR),
-      corr_polar(NUM_AZ_X_PPI, cum_bac.volume.max_beam_size()),
-      neve(NUM_AZ_X_PPI, cum_bac.volume.max_beam_size()),
+      corr_polar(NUM_AZ_X_PPI, volume.max_beam_size()),
+      neve(NUM_AZ_X_PPI, volume.max_beam_size()),
       flag_vpr(0)
 {
     logging_category = log4c_category_get("radar.vpr");
@@ -1826,7 +1826,7 @@ CalcoloVPR::CalcoloVPR(CUM_BAC& cum_bac)
     }
     */
 
-    flag_vpr = new Volume<unsigned char>(cum_bac.volume, 0);
+    flag_vpr = new Volume<unsigned char>(volume, 0);
 
     t_ground = cum_bac.assets.read_t_ground();
 }
@@ -1840,7 +1840,7 @@ void CalcoloVPR::esegui_tutto()
 {
     test_vpr=fopen(getenv("TEST_VPR"),"a+");
 
-    LOG_INFO("processo file dati: %s", cum_bac.volume.load_info->filename.c_str());
+    LOG_INFO("processo file dati: %s", volume.load_info->filename.c_str());
     printf ("calcolo VPR \n") ;
 
     //VPR  // ------------inizializzo hvprmax ---------------
